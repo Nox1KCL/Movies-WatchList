@@ -6,9 +6,9 @@ from enum import Enum
 
 
 class MovieStatus(str, Enum):
-    WANT_TO_WATCH = 'want_to_watch'
-    WATCHING = 'watching'
-    WATCHED = 'watched'
+    want_to_watch = 'want_to_watch'
+    watching = 'watching'
+    watched = 'watched'
 
 
 class MovieCreate(BaseModel):
@@ -16,6 +16,7 @@ class MovieCreate(BaseModel):
     title: str
     year: int
     genre: str
+    status: MovieStatus
 
 
 class MovieUpdate(BaseModel):
@@ -37,17 +38,22 @@ class MovieUpdate(BaseModel):
 
 class MovieResponse(BaseModel):
 
-    tmdb_id: int
+    model_config = {
+        "from_attributes": True, 
+        "use_enum_values": True 
+    }
+
+    tmdb_id: int | None = None
     title: str
-    original_title: str
+    original_title: str | None = None
     year: int
     genre: str
-    poster_url: str 
-    overview: Text 
-    runtime: int 
+    poster_url: str | None = None
+    overview: Text | None = None
+    runtime: int | None = None
     status: Enum
-    user_rating: float 
-    notes: Text
-    watch_date: datetime
-    added_date: datetime 
-    updated_date: datetime 
+    user_rating: float | None = None
+    notes: Text | None = None
+    watch_date: datetime | None = None
+    added_date: datetime | None = None
+    updated_date: datetime | None = None

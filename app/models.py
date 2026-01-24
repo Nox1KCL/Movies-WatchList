@@ -11,9 +11,9 @@ local_tz = get_localzone_name()
 tz = pytz.timezone(local_tz)
 
 class MovieStatus(enum.Enum):
-    WANT_TO_WATCH = 'want_to_watch'
-    WATCHING = 'watching'
-    WATCHED = 'watched'
+    want_to_watch = 'want_to_watch'
+    watching = 'watching'
+    watched = 'watched'
 
 
 class Base(DeclarativeBase): pass
@@ -30,7 +30,7 @@ class Movie(Base):
     poster_url: Mapped[str | None] = mapped_column(String(500))
     overview: Mapped[Text | None] = mapped_column(Text)
     runtime: Mapped[int | None] = mapped_column(Integer)
-    status: Mapped[Enum | None] = mapped_column(Enum(MovieStatus))
+    status: Mapped[Enum] = mapped_column(Enum(MovieStatus), nullable=False)
     user_rating: Mapped[float | None] = mapped_column(Float)
     notes: Mapped[Text | None] = mapped_column(Text)
     watch_date: Mapped[DateTime | None] = mapped_column(DateTime)

@@ -5,7 +5,7 @@ from sqlalchemy import select, insert, delete, update
 
 from database import init_db, get_db
 from logger import setup_logger
-from schemas import MovieStatus, MovieCreate
+from schemas import MovieResponse, MovieCreate
 from models import Movie
 from datetime import datetime
 
@@ -36,7 +36,7 @@ async def show_all_movies(db: AsyncSession = Depends(get_db)):
     return movies
 
 
-@app.post("/movies/")
+@app.post("/movies/", response_model=MovieResponse)
 async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db)):
     
     data = append_movie.model_dump()

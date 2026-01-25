@@ -1,16 +1,14 @@
 # region Імпорти
-
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from logger import setup_logger
 import os
 from dotenv import load_dotenv
-
 # endregion
 
-section = 'DATABASE' # Для зрозумілості звідки логи
 db_logger = setup_logger() 
 load_dotenv() # Загружаєм змінні з .env
+section = 'DATABASE' # Для зрозумілості звідки логи
 
 # Дістаєм ссилку на БД + не забуваєм про дефолт, щоб "create_async_engine" не возмущався
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://localhost/default_db")

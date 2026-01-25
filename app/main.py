@@ -29,8 +29,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Movie Watchlist", lifespan=lifespan) # Створення екземляра FastAPI
-section = "APP" # Для зрозумілості звідки логи
 app_logger = setup_logger()
+section = "APP" # Для зрозумілості звідки логи
 
 # Точка GET для отримання списку фільмів
 @app.get('/movies/', response_model=list[MovieResponse]) # (Pydantic) response_model відповідає за структуру відповіді ендпоїнта

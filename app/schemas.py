@@ -1,8 +1,9 @@
+# region Імпорти
 from pydantic import BaseModel
 from typing import Optional, Text
 from datetime import datetime
 from enum import Enum
-
+# endregion
 
 
 class MovieStatus(str, Enum):
@@ -11,16 +12,18 @@ class MovieStatus(str, Enum):
     watched = 'watched'
 
 
+# Схема при створенні фільму
 class MovieCreate(BaseModel):
-
+    # Не забуваєм про типізацію
     title: str
     year: int
     genre: str
     status: MovieStatus
 
 
+# Модель при обновленні фільму
 class MovieUpdate(BaseModel):
-
+    # Option - не обов'язоковий аргумент у відповіді + типізуєм
     tmdb_id: Optional[int]
     title: Optional[str] 
     original_title: Optional[str]
@@ -36,13 +39,10 @@ class MovieUpdate(BaseModel):
     added_date: Optional[datetime] 
     updated_date: Optional[datetime] 
 
+
+# Схема відповіді (Загальна)
 class MovieResponse(BaseModel):
-
-    model_config = {
-        "from_attributes": True, 
-        "use_enum_values": True 
-    }
-
+    # Типізуєм і додаєм "| None = None" щоб параметр міг бути NULL в БД
     tmdb_id: int | None = None
     title: str
     original_title: str | None = None
@@ -57,3 +57,10 @@ class MovieResponse(BaseModel):
     watch_date: datetime | None = None
     added_date: datetime | None = None
     updated_date: datetime | None = None
+
+    model_config = {
+        # Дозволяє конвертувати SQLAlchemy obj у Pydantic
+        "from_attributes": True,  
+        # Конвертує Enum в строкове значення JSON
+        "use_enum_values": True 
+    }

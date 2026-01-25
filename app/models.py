@@ -1,14 +1,14 @@
+# region Модулі для БД
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import DateTime, Integer, String, Text, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column
+# endregion
 
+# region інші Імпорти
 import enum
 from datetime import datetime
-from tzlocal import get_localzone_name
-import pytz
+# endregion
 
-local_tz = get_localzone_name()
-tz = pytz.timezone(local_tz)
 
 class MovieStatus(enum.Enum):
     want_to_watch = 'want_to_watch'
@@ -16,11 +16,14 @@ class MovieStatus(enum.Enum):
     watched = 'watched'
 
 
-class Base(DeclarativeBase): pass
-class Movie(Base):
+class Base(DeclarativeBase): pass # (SQLAlchemy) Для створення ORM об'єктів
 
+# Таблиця для БД (Загальний вигляд)
+class Movie(Base):
+    # Назва таблиці
     __tablename__ = "movies"
 
+    # Типізуєм, вказуєм "| None" для типів які можуть бути NULL в БД
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     tmdb_id: Mapped[int | None] = mapped_column(Integer, unique=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)

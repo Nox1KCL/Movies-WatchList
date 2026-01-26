@@ -32,13 +32,10 @@ class MovieUpdate(BaseModel):
     poster_url: str | None = None
     overview: Text | None = None
     runtime: int | None = None
-    status: Enum | None = None
+    status: MovieStatus | None = None
     user_rating: float | None = None
     notes: Text | None = None
-    watch_date: datetime | None = None
-    added_date: datetime | None = None
     updated_date: datetime | None = None
-
 
 # Схема відповіді (Загальна)
 class MovieResponse(BaseModel):
@@ -51,10 +48,9 @@ class MovieResponse(BaseModel):
     poster_url: str | None = None
     overview: Text | None = None
     runtime: int | None = None
-    status: Enum
+    status: MovieStatus
     user_rating: float | None = None
     notes: Text | None = None
-    watch_date: datetime | None = None
     added_date: datetime | None = None
     updated_date: datetime | None = None
 

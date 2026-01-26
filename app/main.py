@@ -1,6 +1,6 @@
 # region Модулі для БД / Веба
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete, update
 # endregion
@@ -8,8 +8,8 @@ from sqlalchemy import select, insert, delete, update
 # region Python / Mine модулі
 from database import init_db, get_db
 from logger import setup_logger
-from schemas import MovieResponse, MovieCreate
-from models import Movie
+from schemas import MovieResponse, MovieCreate, MovieUpdate
+from models import Movie, MovieStatus
 from datetime import datetime
 # endregion
 
@@ -42,11 +42,21 @@ async def show_all_movies(db: AsyncSession = Depends(get_db)): # (FastAPI) Depen
 
     return movies
 
+
+@app.get("/movies/{movie_id}", response_model=MovieResponse)
+async def show_one_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
+    stmt = select(Movie).where(Movie.id == movie_id)
+    result = await db.execute(stmt)
+    movie = result.scalars().one()
+
+    return movie
+
+
 # Точка POST для додавання нових фільмів
 @app.post("/movies/", response_model=MovieResponse)
 async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db)):
     
-    data = append_movie.model_dump()
+    data = append_movie.model_dump(exclude_unset=True)
     # При відповіді береться datetime.now(), беремо з нього тільки рік
     if isinstance(data.get('year'), datetime):
         data['year'] = data['year'].year
@@ -57,3 +67,31 @@ async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db
     app_logger.info(f"{section} | {append_movie.title} has appended to database")
 
     return data
+
+# Точка PUT для оновлення фільму через айді
+@app.put("/movies/{movie_id}", response_model=MovieResponse)
+async def update_movie(movie_id: int, movie_changes: MovieUpdate, db: AsyncSession = Depends(get_db)):
+    data = movie_changes.model_dump(exclude_unset=True)
+    if isinstance(data.get('updated_date'), datetime): 
+         data['updated_date'] = datetime.now() # Оновлюєм час апдейта
+
+    stmt = update(Movie).where(Movie.id == movie_id).values(data).returning(Movie)
+    result = await db.execute(stmt)
+    await db.commit()
+    updated_movie=result.scalar_one_or_none()
+    if not updated_movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    
+    return updated_movie
+
+# Точка DELETE для видалення фільму по айді
+@app.delete("/movies/{movie_id}")
+async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
+    stmt = delete(Movie).where(Movie.id == movie_id).returning(Movie)
+    result = await db.execute(stmt)
+    deleted_movie = result.scalar_one_or_none()
+    await db.commit()
+    if not deleted_movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    return deleted_movie

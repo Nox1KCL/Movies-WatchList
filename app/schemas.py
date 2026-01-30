@@ -2,14 +2,11 @@
 from pydantic import BaseModel
 from typing import Text
 from datetime import datetime
-from enum import Enum
 # endregion
 
-
-class MovieStatus(str, Enum):
-    want_to_watch = 'want_to_watch'
-    watching = 'watching'
-    watched = 'watched'
+# region Мої Імпорти
+from .models import MovieStatus
+# endregion 
 
 
 # Схема при створенні фільму
@@ -37,9 +34,10 @@ class MovieUpdate(BaseModel):
     notes: Text | None = None
     updated_date: datetime | None = None
 
+
 # Схема відповіді (Загальна)
 class MovieResponse(BaseModel):
-    
+    id: int
     tmdb_id: int | None = None
     title: str
     original_title: str | None = None
@@ -58,5 +56,5 @@ class MovieResponse(BaseModel):
         # Дозволяє конвертувати SQLAlchemy obj у Pydantic
         "from_attributes": True,  
         # Конвертує Enum в строкове значення JSON
-        "use_enum_values": True 
+        "use_enum_values": True
     }

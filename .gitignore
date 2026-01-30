@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Logs and secrets
+logs/
+
+# My files
+SQLALCHEMY_ASYNC_CHEATSHEET.md
+HOWTO_RUN.md

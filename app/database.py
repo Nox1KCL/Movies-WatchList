@@ -1,7 +1,7 @@
 # region Імпорти
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from logger import setup_logger
+from .logger import setup_logger
 import os
 from dotenv import load_dotenv
 # endregion
@@ -43,7 +43,7 @@ async def get_db():
 
 # Ініціалізація БД
 async def init_db():
-    import models # Щоб Base мала метадані і розуміла яку таблицю створювати
+    from . import models # Щоб Base мала метадані і розуміла яку таблицю створювати
 
     db_logger.info(f"{section} | Creating database tables")
     # Створення таблиці (Обов'язоково має бути модель класу у файлі (або імпорт))

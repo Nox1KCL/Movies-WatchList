@@ -10,7 +10,7 @@ from datetime import datetime
 # endregion
 
 
-class MovieStatus(enum.Enum):
+class MovieStatus(str, enum.Enum):
     want_to_watch = 'want_to_watch'
     watching = 'watching'
     watched = 'watched'

@@ -4,20 +4,20 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete, update
-from .mytools import is_none_filter
 # endregion
 
 # region Python / Mine модулі
-from .database import init_db, get_db
-from .logger import setup_logger
-from .schemas import MovieResponse, MovieCreate, MovieUpdate
-from .models import Movie, MovieStatus
+from app.core.mytools import is_none_filter
+from app.database.database import init_db, get_db
+from app.core.logger import setup_logger
+from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate
+from app.database.models import Movie, MovieStatus
 from datetime import datetime
 # endregion
 
 """
 СПІЛКУВАННЯ з БД оформленно в підході SQLAlchemy Core 
-        Бо працює з асинхронністю, швидше 
+    Бо працює з асинхронністю та є швидшим способом
 """
 
 # Життєвий цикл для керування ресурсами (Асинхронність)
@@ -83,9 +83,6 @@ async def show_one_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
 async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db)):
     
     data = append_movie.model_dump(exclude_unset=True)
-    # При відповіді береться datetime.now(), беремо з нього тільки рік
-    if isinstance(data.get('year'), datetime):
-        data['year'] = data['year'].year
 
     if not data:
         raise HTTPException(status_code=404, detail="Something wrong with data")
@@ -123,3 +120,6 @@ async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
     
     return deleted_movie
+
+
+# TODO покращити структуру папки app

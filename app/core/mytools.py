@@ -1,5 +1,5 @@
 # region Імпорти
-from .models import Movie
+from app.database.models import Movie
 # endregion
 
 

@@ -1,7 +1,7 @@
 # region Імпорти
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from .logger import setup_logger
+from app.core.logger import setup_logger
 import os
 from dotenv import load_dotenv
 # endregion

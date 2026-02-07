@@ -4,6 +4,10 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete, update
+from app.auth.registration import router as auth_router
+from app.auth.login import router as login_router
+from app.auth.security import get_current_user
+from app.database.models import User
 # endregion
 
 # region Python / Mine модулі
@@ -39,6 +43,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(login_router) # login
+app.include_router(auth_router) # Підключаємо роутер registration
 app_logger = setup_logger()
 section = "APP" # Для зрозумілості звідки логи
 
@@ -49,10 +55,11 @@ async def show_all_movies(
         year: int | None = None,
         status: MovieStatus | None = None,
         # (FastAPI) Dependency injection для використання БД
-        db: AsyncSession = Depends(get_db) 
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
     ): 
 
-    stmt = select(Movie) # Створюємо SELECT запит
+    stmt = select(Movie).where(Movie.user_id == current_user.id) # Створюємо SELECT запит
 
     filters = {
         "genre": genre,
@@ -71,8 +78,12 @@ async def show_all_movies(
 
 # Точка GET для отримання фільму по АЙДІ
 @app.get("/movies/{movie_id}", response_model=MovieResponse)
-async def show_one_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
-    stmt = select(Movie).where(Movie.id == movie_id)
+async def show_one_movie(movie_id: int, 
+            db: AsyncSession = Depends(get_db),
+            current_user: User = Depends(get_current_user)
+    ):
+    stmt = select(Movie).where(Movie.user_id == current_user.id, 
+                                Movie.id == movie_id)
     result = await db.execute(stmt)
     movie = result.scalars().one()
 
@@ -80,12 +91,17 @@ async def show_one_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
 
 # Точка POST для ДОДАВАННЯ нових фільмів
 @app.post("/movies/", response_model=MovieResponse)
-async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db)):
+async def add_movie(append_movie: MovieCreate, 
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
     
     data = append_movie.model_dump(exclude_unset=True)
+    data['user_id'] = current_user.id
 
     if not data:
-        raise HTTPException(status_code=404, detail="Something wrong with data")
+        raise HTTPException(status_code=404, 
+        detail="Movie\'s data is incorrect")
     
     stmt = insert(Movie).values(**data).returning(Movie) # Створюємо команду INSERT і повертаємо об'єкт
     result = await db.execute(stmt) # Виконуємо
@@ -98,28 +114,43 @@ async def add_movie(append_movie: MovieCreate, db: AsyncSession = Depends(get_db
 
 # Точка PATCH для ОНОВЛЕННЯ фільму через АЙДІ
 @app.patch("/movies/{movie_id}", response_model=MovieResponse)
-async def update_movie(movie_id: int, movie_changes: MovieUpdate, db: AsyncSession = Depends(get_db)):
+async def update_movie(movie_id: int, 
+        movie_changes: MovieUpdate, 
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
     data = movie_changes.model_dump(exclude_unset=True)
     if isinstance(data.get('updated_date'), datetime): 
          data['updated_date'] = datetime.now() # Оновлюєм час апдейта
     
-    # returning 
-    stmt = update(Movie).where(Movie.id == movie_id).values(data).returning(Movie)
+    if not data:
+        raise HTTPException(status_code=404, 
+        detail="Movie is not exist")
+
+    stmt = update(Movie).where(Movie.user_id == current_user.id, Movie.id == movie_id).values(data).returning(Movie)
     result = await db.execute(stmt)
-    await db.commit()
     updated_movie=result.scalar_one_or_none()
+    await db.commit()
+
+    if not updated_movie:
+        raise HTTPException(status_code=404,
+        detail="Movie not found")
     
     return updated_movie
 
 # Точка DELETE для ВИДАЛЕННЯ фільму по АЙДІ
 @app.delete("/movies/{movie_id}")
-async def delete_movie(movie_id: int, db: AsyncSession = Depends(get_db)):
-    stmt = delete(Movie).where(Movie.id == movie_id).returning(Movie)
+async def delete_movie(movie_id: int, 
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+    ):
+    stmt = delete(Movie).where(Movie.user_id == current_user.id, Movie.id == movie_id).returning(Movie)
     result = await db.execute(stmt)
     deleted_movie = result.scalar_one_or_none()
     await db.commit()
+
+    if not deleted_movie:
+        raise HTTPException(status_code=404,
+        detail="Movie not found")
     
     return deleted_movie
-
-
-# TODO покращити структуру папки app

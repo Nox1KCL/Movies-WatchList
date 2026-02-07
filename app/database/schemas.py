@@ -9,7 +9,20 @@ from .models import MovieStatus
 # endregion 
 
 
-# Схема при створенні фільму
+class UserCreate(BaseModel):
+    email: str
+    username: str
+    password: str
+    
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    username: str
+    created_at: datetime
+    is_active: bool
+
+
 class MovieCreate(BaseModel):
     # Не забуваєм про типізацію
     title: str
@@ -18,7 +31,6 @@ class MovieCreate(BaseModel):
     status: MovieStatus
 
 
-# Модель при обновленні фільму
 class MovieUpdate(BaseModel):
     # Типізуєм і додаєм "| None = None" щоб параметр міг бути NULL в БД
     tmdb_id: int | None = None
@@ -35,7 +47,7 @@ class MovieUpdate(BaseModel):
     updated_date: datetime | None = None
 
 
-# Схема відповіді (Загальна)
+# Схема відповіді для фільмів
 class MovieResponse(BaseModel):
     id: int
     tmdb_id: int | None = None

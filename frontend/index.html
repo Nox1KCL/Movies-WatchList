@@ -246,9 +246,19 @@
           <div
             v-for="movie in movies"
             :key="movie.id"
-            class="card bg-slate-800 rounded-xl overflow-hidden border border-slate-700 relative group"
+            class="card bg-slate-800 rounded-xl overflow-hidden border border-slate-700 relative group flex flex-col h-full"
           >
-            <div class="p-5 flex flex-col h-full">
+            <!-- Постер -->
+            <div v-if="movie.poster_url" class="relative h-48 overflow-hidden shrink-0">
+              <img 
+                :src="movie.poster_url" 
+                :alt="movie.title"
+                class="w-full h-full object-cover"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-slate-800 via-transparent to-transparent"></div>
+            </div>
+            
+            <div class="p-5 flex flex-col flex-1">
               <div class="flex justify-between items-start mb-4">
                 <!-- Ліва частина: Назва та Жанр -->
                 <div class="pr-4">
@@ -274,7 +284,20 @@
                 </div>
               </div>
 
-              <div class="flex gap-2 mt-4 pt-4 border-t border-slate-700">
+              <!-- Overview -->
+              <p v-if="movie.overview" class="text-slate-400 text-sm line-clamp-2 mb-4">
+                {{ movie.overview }}
+              </p>
+
+              <div class="flex gap-2 mt-auto pt-4 border-t border-slate-700">
+                <button
+                  v-if="movie.tmdb_id"
+                  @click="showMovieDetails(movie)"
+                  class="px-3 bg-purple-900/30 hover:bg-purple-900/50 text-purple-400 rounded transition"
+                  title="Деталі"
+                >
+                  ℹ️
+                </button>
                 <button
                   @click="openModal('edit', movie)"
                   class="flex-1 bg-slate-700 hover:bg-slate-600 text-sm py-2 rounded transition"
@@ -308,6 +331,45 @@
               </h2>
 
               <form @submit.prevent="submitForm" class="space-y-4">
+                <!-- TMDB Search (only for add mode) -->
+                <div v-if="modalMode === 'add'" class="mb-4">
+                  <label class="block text-sm text-slate-400 mb-1">🔍 Пошук у TMDB</label>
+                  <input
+                    v-model="tmdbQuery"
+                    @input="searchTMDB"
+                    type="text"
+                    placeholder="Почни вводити назву фільму..."
+                    class="w-full bg-slate-900 border border-slate-600 rounded p-2 focus:border-purple-500 outline-none text-white"
+                  />
+                  <!-- Loading -->
+                  <div v-if="tmdbLoading" class="text-center py-2 text-slate-400 text-sm">
+                    Пошук...
+                  </div>
+                  <!-- Results -->
+                  <div v-if="tmdbResults.length > 0" class="mt-2 max-h-48 overflow-y-auto bg-slate-900 rounded border border-slate-600">
+                    <div
+                      v-for="movie in tmdbResults.slice(0, 6)"
+                      :key="movie.tmdb_id"
+                      @click="selectTMDBMovie(movie)"
+                      class="flex items-center gap-3 p-2 hover:bg-slate-700 cursor-pointer border-b border-slate-700 last:border-0"
+                    >
+                      <img
+                        v-if="movie.poster_url"
+                        :src="movie.poster_url"
+                        class="w-10 h-14 object-cover rounded"
+                        :alt="movie.title"
+                      />
+                      <div v-else class="w-10 h-14 bg-slate-700 rounded flex items-center justify-center text-xs text-slate-500">
+                        🎬
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-white text-sm font-medium truncate">{{ movie.title }}</p>
+                        <p class="text-slate-400 text-xs">{{ movie.year || 'N/A' }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label class="block text-sm text-slate-400 mb-1">Назва</label>
                   <input
@@ -374,6 +436,92 @@
           </div>
         </div>
       </div>
+
+        <!-- Movie Details Modal -->
+        <div
+          v-if="showDetailsModal"
+          class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          @click.self="closeDetailsModal"
+        >
+          <div class="bg-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-600 overflow-hidden">
+            <!-- Loading -->
+            <div v-if="detailsLoading" class="p-12 text-center">
+              <div class="text-4xl mb-4">🎬</div>
+              <p class="text-slate-400">Завантаження...</p>
+            </div>
+            
+            <!-- Content -->
+            <div v-else-if="movieDetails" class="flex flex-col md:flex-row">
+              <!-- Poster -->
+              <div class="md:w-1/3 shrink-0">
+                <img 
+                  v-if="movieDetails.poster_url"
+                  :src="movieDetails.poster_url"
+                  :alt="movieDetails.title"
+                  class="w-full h-64 md:h-full object-cover"
+                />
+                <div v-else class="w-full h-64 md:h-full bg-slate-700 flex items-center justify-center text-6xl">
+                  🎬
+                </div>
+              </div>
+              
+              <!-- Info -->
+              <div class="p-6 flex-1">
+                <button 
+                  @click="closeDetailsModal" 
+                  class="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl"
+                >✕</button>
+                
+                <h2 class="text-2xl font-bold text-white mb-1">{{ movieDetails.title }}</h2>
+                <p v-if="movieDetails.original_title && movieDetails.original_title !== movieDetails.title" class="text-slate-400 text-sm mb-2">
+                  {{ movieDetails.original_title }}
+                </p>
+                <p v-if="movieDetails.tagline" class="text-purple-400 italic mb-4">
+                  "{{ movieDetails.tagline }}"
+                </p>
+                
+                <!-- Meta Info -->
+                <div class="flex flex-wrap gap-2 mb-4 text-sm">
+                  <span class="bg-purple-900/50 text-purple-300 px-2 py-1 rounded">
+                    {{ movieDetails.year }}
+                  </span>
+                  <span v-if="movieDetails.runtime" class="bg-slate-700 text-slate-300 px-2 py-1 rounded">
+                    {{ movieDetails.runtime }} хв
+                  </span>
+                  <span v-if="movieDetails.vote_average" class="bg-yellow-900/50 text-yellow-300 px-2 py-1 rounded">
+                    ⭐ {{ movieDetails.vote_average.toFixed(1) }}
+                  </span>
+                </div>
+                
+                <!-- Genres -->
+                <div v-if="movieDetails.genre" class="mb-4">
+                  <span class="text-sm text-slate-500">Жанри:</span>
+                  <span class="text-slate-300 ml-2">{{ movieDetails.genre }}</span>
+                </div>
+                
+                <!-- Directors -->
+                <div v-if="movieDetails.directors && movieDetails.directors.length" class="mb-4">
+                  <span class="text-sm text-slate-500">Режисер:</span>
+                  <span class="text-slate-300 ml-2">{{ movieDetails.directors.join(', ') }}</span>
+                </div>
+                
+                <!-- Cast -->
+                <div v-if="movieDetails.cast && movieDetails.cast.length" class="mb-4">
+                  <span class="text-sm text-slate-500">Актори:</span>
+                  <span class="text-slate-300 ml-2">{{ movieDetails.cast.join(', ') }}</span>
+                </div>
+                
+                <!-- Overview -->
+                <!-- Overview -->
+                <div class="mt-4">
+                  <p v-if="movieDetails.overview" class="text-slate-400 text-sm leading-relaxed">{{ movieDetails.overview }}</p>
+                  <p v-else class="text-slate-600 text-sm italic">Опис відсутній.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -413,8 +561,22 @@
               year: new Date().getFullYear(),
               genre: "",
               status: "want_to_watch",
+              tmdb_id: null,
+              poster_url: "",
+              overview: "",
+              original_title: "",
             },
             debounceTimer: null,
+            // TMDB Search
+            tmdbQuery: "",
+            tmdbResults: [],
+            tmdbLoading: false,
+            tmdbSearchTimer: null,
+            
+            // Movie Details Modal
+            showDetailsModal: false,
+            movieDetails: null,
+            detailsLoading: false,
           };
         },
         mounted() {
@@ -569,12 +731,18 @@
               this.currentId = null;
               this.form = {
                 title: "",
-                year: 2024,
+                year: new Date().getFullYear(),
                 genre: "",
                 status: "want_to_watch",
+                tmdb_id: null,
+                poster_url: "",
+                overview: "",
+                original_title: "",
               };
             }
             this.showModal = true;
+            this.tmdbQuery = "";
+            this.tmdbResults = [];
           },
 
           closeModal() {
@@ -614,6 +782,8 @@
           },
 
           async deleteMovie(id) {
+            if (!confirm('Ви впевнені, що хочете видалити цей фільм?')) return;
+            
             try {
               const res = await fetch(`${API_URL}/movies/${id}`, {
                 method: "DELETE",
@@ -646,6 +816,89 @@
               watched: "Переглянуто",
             };
             return map[status] || status;
+          },
+
+          // ========== TMDB SEARCH METHODS ==========
+          searchTMDB() {
+            clearTimeout(this.tmdbSearchTimer);
+            if (!this.tmdbQuery || this.tmdbQuery.length < 2) {
+              this.tmdbResults = [];
+              return;
+            }
+            this.tmdbSearchTimer = setTimeout(async () => {
+              this.tmdbLoading = true;
+              try {
+                const res = await fetch(
+                  `${API_URL}/movies/search?query=${encodeURIComponent(this.tmdbQuery)}`,
+                  { headers: this.getAuthHeaders() }
+                );
+                if (res.ok) {
+                  this.tmdbResults = await res.json();
+                }
+              } catch (e) {
+                console.error("TMDB search error:", e);
+              } finally {
+                this.tmdbLoading = false;
+              }
+            }, 400);
+          },
+
+          async selectTMDBMovie(movie) {
+            this.form.title = movie.title;
+            this.form.original_title = movie.original_title || "";
+            this.form.year = movie.year || new Date().getFullYear();
+            this.form.tmdb_id = movie.tmdb_id;
+            this.form.poster_url = movie.poster_url || "";
+            this.form.overview = movie.overview || "";
+            this.form.genre = movie.genre || "";
+            
+            this.tmdbQuery = "";
+            this.tmdbResults = [];
+
+            // Fetch full details to ensure genre and other fields are populated correctly
+            if (movie.tmdb_id) {
+              try {
+                const res = await fetch(`${API_URL}/movies/tmdb/${movie.tmdb_id}`, {
+                  headers: this.getAuthHeaders()
+                });
+                if (res.ok) {
+                  const details = await res.json();
+                  if (details.genre) this.form.genre = details.genre;
+                  if (details.overview && !this.form.overview) this.form.overview = details.overview;
+                  if (details.original_title) this.form.original_title = details.original_title;
+                }
+              } catch (e) {
+                console.warn("Failed to fetch full details for autofill", e);
+              }
+            }
+          },
+
+          // ========== MOVIE DETAILS MODAL ==========
+          async showMovieDetails(movie) {
+            if (!movie.tmdb_id) return;
+            
+            this.showDetailsModal = true;
+            this.detailsLoading = true;
+            this.movieDetails = null;
+            
+            try {
+              const res = await fetch(
+                `${API_URL}/movies/tmdb/${movie.tmdb_id}`,
+                { headers: this.getAuthHeaders() }
+              );
+              if (res.ok) {
+                this.movieDetails = await res.json();
+              }
+            } catch (e) {
+              console.error("Error fetching movie details:", e);
+            } finally {
+              this.detailsLoading = false;
+            }
+          },
+
+          closeDetailsModal() {
+            this.showDetailsModal = false;
+            this.movieDetails = null;
           },
         },
       }).mount("#app");

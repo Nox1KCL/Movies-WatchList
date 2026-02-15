@@ -16,6 +16,7 @@ from app.database.database import init_db, get_db
 from app.core.logger import setup_logger
 from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate
 from app.database.models import Movie, MovieStatus
+from app.services.tmdb import tmdb_service
 from datetime import datetime
 # endregion
 
@@ -47,6 +48,35 @@ app.include_router(login_router) # login
 app.include_router(auth_router) # Підключаємо роутер registration
 app_logger = setup_logger()
 section = "APP" # Для зрозумілості звідки логи
+
+
+# ========== TMDB API ==========
+
+@app.get('/movies/search')
+async def search_tmdb_movies(
+        query: str,
+        page: int = 1,
+        current_user: User = Depends(get_current_user)
+    ):
+    """
+    Пошук фільмів в TMDB за назвою.
+    Повертає список знайдених фільмів з постерами та описом.
+    """
+    results = await tmdb_service.search_and_format(query, page)
+    return results
+
+
+@app.get('/movies/tmdb/{tmdb_id}')
+async def get_tmdb_movie_details(
+        tmdb_id: int,
+        current_user: User = Depends(get_current_user)
+    ):
+    """
+    Отримати детальну інформацію про фільм з TMDB.
+    Повертає повні дані: жанри, акторів, режисера, тривалість і т.д.
+    """
+    details = await tmdb_service.get_details_formatted(tmdb_id)
+    return details
 
 # Точка GET для отримання списку фільмів ПО ФІЛЬТРАМ
 @app.get('/movies/', response_model=list[MovieResponse]) # (Pydantic) response_model відповідає за структуру відповіді ендпоїнта

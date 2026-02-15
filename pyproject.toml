@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "psycopg2-binary>=2.9.11",
     "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.22",
     "pytz>=2025.2",
     "redis>=7.1.0",
     "sqlalchemy>=2.0.46",

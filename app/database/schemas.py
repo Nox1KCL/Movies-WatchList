@@ -29,6 +29,11 @@ class MovieCreate(BaseModel):
     year: int
     genre: str
     status: MovieStatus
+    # TMDB fields (optional)
+    tmdb_id: int | None = None
+    original_title: str | None = None
+    poster_url: str | None = None
+    overview: Text | None = None
 
 
 class MovieUpdate(BaseModel):

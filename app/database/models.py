@@ -44,7 +44,7 @@ class Movie(Base):
 
     # Типізуєм, вказуєм "| None" для типів які можуть бути NULL в БД
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    tmdb_id: Mapped[int | None] = mapped_column(Integer, unique=True)
+    tmdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     original_title: Mapped[str | None] = mapped_column(String(255))
     year: Mapped[int] = mapped_column(Integer, nullable=False)

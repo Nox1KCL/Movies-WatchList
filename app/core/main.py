@@ -7,7 +7,10 @@ from sqlalchemy import select, insert, delete, update
 from app.auth.registration import router as auth_router
 from app.auth.login import router as login_router
 from app.auth.security import get_current_user
+from app.core import redis_client
 from app.database.models import User
+from app.core.redis_client import get_redis, close_redis
+from app.services.tmdb import TMDBService
 # endregion
 
 # region Python / Mine модулі
@@ -16,7 +19,6 @@ from app.database.database import init_db, get_db
 from app.core.logger import setup_logger
 from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate
 from app.database.models import Movie, MovieStatus
-from app.services.tmdb import tmdb_service
 from datetime import datetime
 # endregion
 
@@ -25,14 +27,40 @@ from datetime import datetime
     Бо працює з асинхронністю та є швидшим способом
 """
 
+# Глобальна змінна для TMDB сервісу (ініціалізується в lifespan)
+tmdb_service = None
+
 # Життєвий цикл для керування ресурсами (Асинхронність)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     
     await init_db()
     app_logger.info(f"{section} | Application started")
+    redis = await get_redis()
+    app_logger.info("Redis connected")
+    
+    # Ініціалізувати TMDB сервіс з Redis клієнтом
+    from app.services.tmdb import TMDBService
+    global tmdb_service
+    tmdb_service = TMDBService(redis_client=redis)
+    app_logger.info("TMDB service initialized")
+
     yield
+
+    await close_redis()
+    app_logger.info("Redis disconnected")
     app_logger.info(f"{section} | Application shutting down")
+
+
+# Dependency injection для TMDB сервісу
+def get_tmdb_service():
+    """Повертає ініціалізований TMDB сервіс."""
+    if tmdb_service is None:
+        raise HTTPException(
+            status_code=503, 
+            detail="TMDB service is not initialized"
+        )
+    return tmdb_service
 
 
 app = FastAPI(title="Movie Watchlist", lifespan=lifespan) # Створення екземляра FastAPI
@@ -56,26 +84,28 @@ section = "APP" # Для зрозумілості звідки логи
 async def search_tmdb_movies(
         query: str,
         page: int = 1,
-        current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user),
+        tmdb: TMDBService = Depends(get_tmdb_service)
     ):
     """
     Пошук фільмів в TMDB за назвою.
     Повертає список знайдених фільмів з постерами та описом.
     """
-    results = await tmdb_service.search_and_format(query, page)
+    results = await tmdb.search_and_format(query, page)
     return results
 
 
 @app.get('/movies/tmdb/{tmdb_id}')
 async def get_tmdb_movie_details(
         tmdb_id: int,
-        current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user),
+        tmdb: TMDBService = Depends(get_tmdb_service)
     ):
     """
     Отримати детальну інформацію про фільм з TMDB.
     Повертає повні дані: жанри, акторів, режисера, тривалість і т.д.
     """
-    details = await tmdb_service.get_details_formatted(tmdb_id)
+    details = await tmdb.get_details_formatted(tmdb_id)
     return details
 
 # Точка GET для отримання списку фільмів ПО ФІЛЬТРАМ

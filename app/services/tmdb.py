@@ -3,8 +3,10 @@
 Сервіс для взаємодії з The Movie Database API.
 """
 
+import redis.asyncio as redis
 import os
 import httpx
+import json
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -15,21 +17,21 @@ TMDB_BASE_URL = "https://api.themoviedb.org/3"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
 # Кеш для жанрів (завантажується один раз)
-GENRE_CACHE: dict[int, str] = {}
+
 
 
 class TMDBService:
     """Клієнт для TMDB API."""
     
-    def __init__(self):
+    def __init__(self, redis_client: redis.Redis | None = None):
         self.api_key = TMDB_API_KEY
         self.base_url = TMDB_BASE_URL
         self.genres_loaded = False
+        self.redis_client = redis_client
         
     async def load_genres(self) -> None:
         """Завантажити список жанрів з TMDB."""
-        global GENRE_CACHE
-        if self.genres_loaded:
+        if self.genres_loaded or not self.redis_client:
             return
             
         async with httpx.AsyncClient() as client:
@@ -42,14 +44,28 @@ class TMDBService:
             )
             if response.status_code == 200:
                 data = response.json()
-                GENRE_CACHE = {g["id"]: g["name"] for g in data.get("genres", [])}
+                await self.redis_client.hset("tmdb:genres", mapping={ # type: ignore
+                    str(g["id"]): g["name"] for g in data.get("genres", [])
+                })
                 self.genres_loaded = True
     
-    def get_genres_text(self, genre_ids: list[int]) -> str:
+
+
+    
+    async def get_genres_text(self, genre_ids: list[int]) -> str:
         """Перетворити список ID жанрів у текст."""
-        genres = [GENRE_CACHE.get(gid, "") for gid in genre_ids if GENRE_CACHE.get(gid)]
+        if not self.redis_client or not genre_ids:
+            return ""        
+        
+        genres = []
+        for gid in genre_ids:
+            genre_name = await self.redis_client.hget("tmdb:genres", str(gid))  # type: ignore
+            if genre_name:
+                genres.append(genre_name)
+
         return ", ".join(genres[:3]) if genres else ""
         
+
     async def search_movies(self, query: str, page: int = 1) -> dict:
         """Пошук фільмів за назвою."""
         await self.load_genres()
@@ -68,6 +84,7 @@ class TMDBService:
             response.raise_for_status()
             return response.json()
     
+
     async def get_movie_details(self, tmdb_id: int) -> dict:
         """Отримати детальну інформацію про фільм."""
         await self.load_genres()
@@ -84,7 +101,8 @@ class TMDBService:
             response.raise_for_status()
             return response.json()
     
-    def format_movie_result(self, movie: dict) -> dict:
+
+    async def format_movie_result(self, movie: dict) -> dict:
         """Форматування результату пошуку для фронтенду."""
         genre_ids = movie.get("genre_ids", [])
         
@@ -98,10 +116,11 @@ class TMDBService:
             "backdrop_url": f"{TMDB_IMAGE_BASE}{movie.get('backdrop_path')}" if movie.get("backdrop_path") else None,
             "vote_average": movie.get("vote_average"),
             "vote_count": movie.get("vote_count"),
-            "genre": self.get_genres_text(genre_ids),
+            "genre": await self.get_genres_text(genre_ids),
             "genre_ids": genre_ids,
         }
     
+
     def format_movie_details(self, movie: dict) -> dict:
         """Форматування детальної інформації про фільм."""
         # Отримуємо жанри напряму (в деталях вони як об'єкти)
@@ -133,16 +152,42 @@ class TMDBService:
             "status": movie.get("status"),
         }
     
+
     async def search_and_format(self, query: str, page: int = 1) -> list[dict]:
         """Пошук та форматування результатів."""
-        data = await self.search_movies(query, page)
-        return [self.format_movie_result(movie) for movie in data.get("results", [])]
+        cache_key = f"tmdb:search:{query}:{page}"
+        
+        # Спроба отримати з кешу
+        json_data = await self.redis_client.get(cache_key) # type: ignore
+        
+        data = None
+        if json_data:
+            data = json.loads(json_data)
+        
+        # Якщо в кеші немає - запит до API
+        if not data:
+            data = await self.search_movies(query, page)
+            # Зберігаємо в кеш на 1 годину (3600 сек)
+            await self.redis_client.setex( # type: ignore
+                cache_key, 
+                3600, 
+                json.dumps(data)
+            )
+
+        # Форматування результату (спільне для кешу та API)
+        results = []
+        for movie in data.get("results", []):
+            formatted = await self.format_movie_result(movie)
+            results.append(formatted)
+            
+        return results
     
+
     async def get_details_formatted(self, tmdb_id: int) -> dict:
         """Отримати відформатовані деталі фільму."""
         data = await self.get_movie_details(tmdb_id)
         return self.format_movie_details(data)
 
 
-# Singleton instance
-tmdb_service = TMDBService()
+# Singleton instance - буде ініціалізовано при старті застосунку
+tmdb_service: TMDBService

@@ -3,21 +3,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, delete, update
+from sqlalchemy import select, insert, delete, update, func, extract
 from app.auth.registration import router as auth_router
 from app.auth.login import router as login_router
 from app.auth.security import get_current_user
-from app.core import redis_client
 from app.database.models import User
 from app.core.redis_client import get_redis, close_redis
 from app.services.tmdb import TMDBService
 # endregion
 
 # region Python / Mine модулі
+import asyncio
+from collections import Counter
 from app.core.mytools import is_none_filter
 from app.database.database import init_db, get_db
 from app.core.logger import setup_logger
-from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate
+from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate, StatsResponse, MonthlyHistory, GenreCount
 from app.database.models import Movie, MovieStatus
 from datetime import datetime
 # endregion
@@ -136,6 +137,62 @@ async def show_all_movies(
 
     return movies
 
+
+# Точка GET для СТАТИСТИКИ — має бути ДО /movies/{movie_id} !
+@app.get("/movies/stats/", response_model=StatsResponse)
+async def user_stats(
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)):
+    
+    stmt = select(Movie.status, func.count(Movie.id).label("count")
+    ).where(Movie.user_id == current_user.id).group_by(Movie.status)
+    response = await db.execute(stmt)
+    status_rows = response.all()
+    by_status = {row._mapping["status"].value: int(row._mapping["count"]) for row in status_rows}
+
+    genre_stmt = select(Movie.genre).where(Movie.user_id == current_user.id)
+    genre_result = await db.execute(genre_stmt)
+    genres_raw = genre_result.scalars().all()
+    counter = Counter()
+    for genre_str in genres_raw:
+        for genre in genre_str.split(","):
+            counter[genre.strip()] += 1
+    top_genres = [GenreCount(name=g, count=c) for g, c in counter.most_common(5)]
+
+    monthly_stmt = (
+        select(
+            extract('year', Movie.watch_date).label("year"),
+            extract('month', Movie.watch_date).label("month"),
+            func.count(Movie.id).label("count")
+        )
+        .where(
+            Movie.user_id == current_user.id,
+            Movie.status == MovieStatus.watched,
+            Movie.watch_date.isnot(None)
+        )
+        .group_by(
+            extract('year', Movie.watch_date),
+            extract('month', Movie.watch_date)
+        )
+        .order_by(
+            extract('year', Movie.watch_date),
+            extract('month', Movie.watch_date)
+        )
+    )
+    monthly_result = await db.execute(monthly_stmt)
+    monthly_rows = monthly_result.all()
+    monthly_history = [
+        MonthlyHistory(year=int(r._mapping["year"]), month=int(r._mapping["month"]), count=int(r._mapping["count"]))
+        for r in monthly_rows
+    ]
+
+    return StatsResponse(
+        by_status=by_status,
+        top_genres=top_genres,
+        monthly_history=monthly_history
+    )
+
+
 # Точка GET для отримання фільму по АЙДІ
 @app.get("/movies/{movie_id}", response_model=MovieResponse)
 async def show_one_movie(movie_id: int, 
@@ -159,6 +216,10 @@ async def add_movie(append_movie: MovieCreate,
     data = append_movie.model_dump(exclude_unset=True)
     data['user_id'] = current_user.id
 
+    # Автоматично ставимо дату перегляду якщо статус watched
+    if data.get('status') == MovieStatus.watched and not data.get('watch_date'):
+        data['watch_date'] = datetime.now()
+
     if not data:
         raise HTTPException(status_code=404, 
         detail="Movie\'s data is incorrect")
@@ -181,7 +242,11 @@ async def update_movie(movie_id: int,
     ):
     data = movie_changes.model_dump(exclude_unset=True)
     if isinstance(data.get('updated_date'), datetime): 
-         data['updated_date'] = datetime.now() # Оновлюєм час апдейта
+        data['updated_date'] = datetime.now()
+
+    # Автоматично ставимо дату перегляду якщо статус змінено на watched
+    if data.get('status') == MovieStatus.watched and not data.get('watch_date'):
+        data['watch_date'] = datetime.now()
     
     if not data:
         raise HTTPException(status_code=404, 
@@ -199,7 +264,7 @@ async def update_movie(movie_id: int,
     return updated_movie
 
 # Точка DELETE для ВИДАЛЕННЯ фільму по АЙДІ
-@app.delete("/movies/{movie_id}")
+@app.delete("/movies/{movie_id}", response_model=MovieResponse)
 async def delete_movie(movie_id: int, 
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)

@@ -75,3 +75,20 @@ class MovieResponse(BaseModel):
         # Конвертує Enum в строкове значення JSON
         "use_enum_values": True
     }
+
+
+class GenreCount(BaseModel):
+    name: str
+    count: int
+
+
+class MonthlyHistory(BaseModel):
+    year: int
+    month: int
+    count: int
+
+
+class StatsResponse(BaseModel):
+    by_status: dict[str, int]
+    top_genres: list[GenreCount]
+    monthly_history: list[MonthlyHistory]

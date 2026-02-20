@@ -36,6 +36,10 @@
       .fade-leave-to {
         opacity: 0;
       }
+
+      .genre-bar {
+        transition: width 0.6s ease;
+      }
     </style>
   </head>
 
@@ -143,7 +147,7 @@
 
       <!-- MAIN APP (when authenticated) -->
       <div v-else>
-        <header class="mb-10 flex justify-between items-center">
+        <header class="mb-8 flex justify-between items-center">
           <div class="text-center flex-1">
             <h1
               class="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-2"
@@ -168,152 +172,307 @@
           </div>
         </header>
 
+        <!-- NAV TABS -->
         <div
-          class="bg-slate-800 p-6 rounded-xl shadow-lg mb-8 border border-slate-700"
+          class="flex mb-8 bg-slate-800 rounded-xl p-1 border border-slate-700"
         >
-          <div
-            class="flex flex-col md:flex-row gap-4 justify-between items-end"
+          <button
+            @click="switchTab('movies')"
+            :class="activeTab === 'movies' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'"
+            class="flex-1 py-2.5 px-6 rounded-lg font-semibold transition flex items-center justify-center gap-2"
           >
-            <div class="flex flex-wrap gap-3 w-full md:w-auto">
-              <div>
-                <label class="text-xs font-semibold text-slate-400 uppercase"
-                  >Статус</label
-                >
-                <select
-                  v-model="filters.status"
-                  @change="fetchMovies"
-                  class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none"
-                >
-                  <option value="">Всі</option>
-                  <option value="want_to_watch">Хочу подивитись</option>
-                  <option value="watching">Дивлюсь</option>
-                  <option value="watched">Переглянуто</option>
-                </select>
+            🎬 Фільми
+          </button>
+          <button
+            @click="switchTab('stats')"
+            :class="activeTab === 'stats' ? 'bg-purple-600 text-white shadow' : 'text-slate-400 hover:text-white'"
+            class="flex-1 py-2.5 px-6 rounded-lg font-semibold transition flex items-center justify-center gap-2"
+          >
+            📊 Статистика
+          </button>
+        </div>
+
+        <!-- ========== MOVIES TAB ========== -->
+        <div v-if="activeTab === 'movies'">
+          <div
+            class="bg-slate-800 p-6 rounded-xl shadow-lg mb-8 border border-slate-700"
+          >
+            <div
+              class="flex flex-col md:flex-row gap-4 justify-between items-end"
+            >
+              <div class="flex flex-wrap gap-3 w-full md:w-auto">
+                <div>
+                  <label class="text-xs font-semibold text-slate-400 uppercase"
+                    >Статус</label
+                  >
+                  <select
+                    v-model="filters.status"
+                    @change="fetchMovies"
+                    class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none"
+                  >
+                    <option value="">Всі</option>
+                    <option value="want_to_watch">Хочу подивитись</option>
+                    <option value="watching">Дивлюсь</option>
+                    <option value="watched">Переглянуто</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-slate-400 uppercase"
+                    >Рік</label
+                  >
+                  <input
+                    v-model="filters.year"
+                    @input="debounceFetch"
+                    type="number"
+                    placeholder="2024"
+                    class="block w-24 mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none text-white appearance-none"
+                  />
+                </div>
+                <div>
+                  <label class="text-xs font-semibold text-slate-400 uppercase"
+                    >Жанр</label
+                  >
+                  <input
+                    v-model="filters.genre"
+                    @input="debounceFetch"
+                    placeholder="Пошук жанру..."
+                    class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none text-white"
+                  />
+                </div>
               </div>
-              <div>
-                <label class="text-xs font-semibold text-slate-400 uppercase"
-                  >Рік</label
-                >
-                <input
-                  v-model="filters.year"
-                  @input="debounceFetch"
-                  type="number"
-                  placeholder="2024"
-                  class="block w-24 mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none text-white appearance-none"
+
+              <button
+                @click="openModal('add')"
+                class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-semibold shadow-lg transition flex items-center gap-2 w-full md:w-auto justify-center"
+              >
+                <span>+ Додати фільм</span>
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="loading"
+            class="text-center py-20 text-slate-500 animate-pulse"
+          >
+            Завантаження...
+          </div>
+
+          <div
+            v-else-if="movies.length === 0"
+            class="text-center py-20 text-slate-500"
+          >
+            <p class="text-xl">Список порожній 😔</p>
+            <p class="text-sm">
+              Спробуй змінити фільтри або додати новий фільм.
+            </p>
+          </div>
+
+          <div
+            v-else
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          >
+            <div
+              v-for="movie in movies"
+              :key="movie.id"
+              class="card bg-slate-800 rounded-xl overflow-hidden border border-slate-700 relative group flex flex-col h-full"
+            >
+              <!-- Постер -->
+              <div
+                v-if="movie.poster_url"
+                class="relative h-48 overflow-hidden shrink-0"
+              >
+                <img
+                  :src="movie.poster_url"
+                  :alt="movie.title"
+                  class="w-full h-full object-cover"
                 />
+                <div
+                  class="absolute inset-0 bg-gradient-to-t from-slate-800 via-transparent to-transparent"
+                ></div>
               </div>
-              <div>
-                <label class="text-xs font-semibold text-slate-400 uppercase"
-                  >Жанр</label
+
+              <div class="p-5 flex flex-col flex-1">
+                <div class="flex justify-between items-start mb-4">
+                  <!-- Ліва частина: Назва та Жанр -->
+                  <div class="pr-4">
+                    <h3 class="text-xl font-bold text-white leading-tight mb-1">
+                      {{ movie.title }}
+                    </h3>
+                    <p class="text-purple-400 text-sm font-medium">
+                      {{ movie.genre }}
+                    </p>
+                  </div>
+
+                  <!-- Права частина: Статус та Рік -->
+                  <div class="flex flex-col items-end shrink-0">
+                    <div
+                      class="px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm mb-2"
+                      :class="statusColor(movie.status)"
+                    >
+                      {{ formatStatus(movie.status) }}
+                    </div>
+                    <span class="text-slate-500 font-mono text-sm"
+                      >{{ movie.year }}</span
+                    >
+                  </div>
+                </div>
+
+                <!-- Overview -->
+                <p
+                  v-if="movie.overview"
+                  class="text-slate-400 text-sm line-clamp-2 mb-4"
                 >
-                <input
-                  v-model="filters.genre"
-                  @input="debounceFetch"
-                  placeholder="Пошук жанру..."
-                  class="block w-full mt-1 bg-slate-900 border border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-purple-500 outline-none text-white"
-                />
+                  {{ movie.overview }}
+                </p>
+
+                <div class="flex gap-2 mt-auto pt-4 border-t border-slate-700">
+                  <button
+                    v-if="movie.tmdb_id"
+                    @click="showMovieDetails(movie)"
+                    class="px-3 bg-purple-900/30 hover:bg-purple-900/50 text-purple-400 rounded transition"
+                    title="Деталі"
+                  >
+                    ℹ️
+                  </button>
+                  <button
+                    @click="openModal('edit', movie)"
+                    class="flex-1 bg-slate-700 hover:bg-slate-600 text-sm py-2 rounded transition"
+                  >
+                    Редагувати
+                  </button>
+                  <button
+                    type="button"
+                    @click.stop="deleteMovie(movie.id)"
+                    class="px-3 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition"
+                    title="Видалити"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             </div>
-
-            <button
-              @click="openModal('add')"
-              class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-semibold shadow-lg transition flex items-center gap-2 w-full md:w-auto justify-center"
-            >
-              <span>+ Додати фільм</span>
-            </button>
           </div>
         </div>
 
-        <div
-          v-if="loading"
-          class="text-center py-20 text-slate-500 animate-pulse"
-        >
-          Завантаження...
-        </div>
-
-        <div
-          v-else-if="movies.length === 0"
-          class="text-center py-20 text-slate-500"
-        >
-          <p class="text-xl">Список порожній 😔</p>
-          <p class="text-sm">Спробуй змінити фільтри або додати новий фільм.</p>
-        </div>
-
-        <div
-          v-else
-          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        >
+        <!-- ========== STATS TAB ========== -->
+        <div v-if="activeTab === 'stats'">
           <div
-            v-for="movie in movies"
-            :key="movie.id"
-            class="card bg-slate-800 rounded-xl overflow-hidden border border-slate-700 relative group flex flex-col h-full"
+            v-if="statsLoading"
+            class="text-center py-20 text-slate-500 animate-pulse"
           >
-            <!-- Постер -->
-            <div v-if="movie.poster_url" class="relative h-48 overflow-hidden shrink-0">
-              <img 
-                :src="movie.poster_url" 
-                :alt="movie.title"
-                class="w-full h-full object-cover"
-              />
-              <div class="absolute inset-0 bg-gradient-to-t from-slate-800 via-transparent to-transparent"></div>
-            </div>
-            
-            <div class="p-5 flex flex-col flex-1">
-              <div class="flex justify-between items-start mb-4">
-                <!-- Ліва частина: Назва та Жанр -->
-                <div class="pr-4">
-                  <h3 class="text-xl font-bold text-white leading-tight mb-1">
-                    {{ movie.title }}
-                  </h3>
-                  <p class="text-purple-400 text-sm font-medium">
-                    {{ movie.genre }}
+            Завантаження статистики...
+          </div>
+
+          <div v-else-if="stats">
+            <!-- By Status Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div
+                class="bg-slate-800 rounded-xl p-6 border border-slate-700 flex items-center gap-4"
+              >
+                <div class="text-4xl">📋</div>
+                <div>
+                  <p class="text-slate-400 text-sm mb-1">У планах</p>
+                  <p class="text-3xl font-bold text-blue-400">
+                    {{ stats.by_status['want_to_watch'] ?? 0 }}
                   </p>
                 </div>
+              </div>
+              <div
+                class="bg-slate-800 rounded-xl p-6 border border-slate-700 flex items-center gap-4"
+              >
+                <div class="text-4xl">▶️</div>
+                <div>
+                  <p class="text-slate-400 text-sm mb-1">Дивлюсь</p>
+                  <p class="text-3xl font-bold text-yellow-400">
+                    {{ stats.by_status['watching'] ?? 0 }}
+                  </p>
+                </div>
+              </div>
+              <div
+                class="bg-slate-800 rounded-xl p-6 border border-slate-700 flex items-center gap-4"
+              >
+                <div class="text-4xl">✅</div>
+                <div>
+                  <p class="text-slate-400 text-sm mb-1">Переглянуто</p>
+                  <p class="text-3xl font-bold text-green-400">
+                    {{ stats.by_status['watched'] ?? 0 }}
+                  </p>
+                </div>
+              </div>
+            </div>
 
-                <!-- Права частина: Статус та Рік -->
-                <div class="flex flex-col items-end shrink-0">
-                  <div
-                    class="px-3 py-1 rounded-full text-xs font-bold uppercase shadow-sm mb-2"
-                    :class="statusColor(movie.status)"
-                  >
-                    {{ formatStatus(movie.status) }}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <!-- Top Genres -->
+              <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h2 class="text-lg font-bold text-white mb-5">🎭 Топ жанри</h2>
+                <div
+                  v-if="stats.top_genres.length === 0"
+                  class="text-slate-500 text-sm"
+                >
+                  Немає даних
+                </div>
+                <div v-else class="space-y-4">
+                  <div v-for="(g, i) in stats.top_genres" :key="g.name">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span class="text-slate-300 font-medium"
+                        >{{ g.name }}</span
+                      >
+                      <span class="text-slate-500">{{ g.count }}</span>
+                    </div>
+                    <div class="bg-slate-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        class="genre-bar h-2 rounded-full bg-gradient-to-r from-purple-500 to-pink-500"
+                        :style="{ width: genreBarWidth(g.count) + '%' }"
+                      ></div>
+                    </div>
                   </div>
-                  <span class="text-slate-500 font-mono text-sm"
-                    >{{ movie.year }}</span
-                  >
                 </div>
               </div>
 
-              <!-- Overview -->
-              <p v-if="movie.overview" class="text-slate-400 text-sm line-clamp-2 mb-4">
-                {{ movie.overview }}
-              </p>
-
-              <div class="flex gap-2 mt-auto pt-4 border-t border-slate-700">
-                <button
-                  v-if="movie.tmdb_id"
-                  @click="showMovieDetails(movie)"
-                  class="px-3 bg-purple-900/30 hover:bg-purple-900/50 text-purple-400 rounded transition"
-                  title="Деталі"
+              <!-- Monthly History -->
+              <div class="bg-slate-800 rounded-xl p-6 border border-slate-700">
+                <h2 class="text-lg font-bold text-white mb-5">
+                  📅 Переглянуто по місяцях
+                </h2>
+                <div
+                  v-if="stats.monthly_history.length === 0"
+                  class="text-slate-500 text-sm"
                 >
-                  ℹ️
-                </button>
-                <button
-                  @click="openModal('edit', movie)"
-                  class="flex-1 bg-slate-700 hover:bg-slate-600 text-sm py-2 rounded transition"
-                >
-                  Редагувати
-                </button>
-                <button
-                  type="button"
-                  @click.stop="deleteMovie(movie.id)"
-                  class="px-3 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition"
-                  title="Видалити"
-                >
-                  ✕
-                </button>
+                  Немає переглянутих фільмів з датою перегляду
+                </div>
+                <div v-else class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  <div
+                    v-for="m in stats.monthly_history"
+                    :key="m.year + '-' + m.month"
+                    class="flex items-center justify-between bg-slate-700/50 rounded-lg px-4 py-2"
+                  >
+                    <span class="text-slate-300 font-medium">
+                      {{ monthName(m.month) }} {{ m.year }}
+                    </span>
+                    <span
+                      class="bg-purple-900/50 text-purple-300 px-3 py-0.5 rounded-full text-sm font-bold"
+                    >
+                      {{ m.count }} фільм{{ m.count === 1 ? '' : m.count < 5 ?
+                      'и' : 'ів' }}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
+
+            <!-- Total summary -->
+            <div
+              class="bg-slate-800 rounded-xl p-5 border border-slate-700 flex items-center justify-between"
+            >
+              <span class="text-slate-400">Всього фільмів у списку</span>
+              <span class="text-2xl font-bold text-purple-400"
+                >{{ totalMovies }}</span
+              >
+            </div>
+          </div>
+
+          <div v-else class="text-center py-20 text-slate-500">
+            Немає даних для відображення
           </div>
         </div>
 
@@ -333,7 +492,9 @@
               <form @submit.prevent="submitForm" class="space-y-4">
                 <!-- TMDB Search (only for add mode) -->
                 <div v-if="modalMode === 'add'" class="mb-4">
-                  <label class="block text-sm text-slate-400 mb-1">🔍 Пошук у TMDB</label>
+                  <label class="block text-sm text-slate-400 mb-1"
+                    >🔍 Пошук у TMDB</label
+                  >
                   <input
                     v-model="tmdbQuery"
                     @input="searchTMDB"
@@ -342,11 +503,17 @@
                     class="w-full bg-slate-900 border border-slate-600 rounded p-2 focus:border-purple-500 outline-none text-white"
                   />
                   <!-- Loading -->
-                  <div v-if="tmdbLoading" class="text-center py-2 text-slate-400 text-sm">
+                  <div
+                    v-if="tmdbLoading"
+                    class="text-center py-2 text-slate-400 text-sm"
+                  >
                     Пошук...
                   </div>
                   <!-- Results -->
-                  <div v-if="tmdbResults.length > 0" class="mt-2 max-h-48 overflow-y-auto bg-slate-900 rounded border border-slate-600">
+                  <div
+                    v-if="tmdbResults.length > 0"
+                    class="mt-2 max-h-48 overflow-y-auto bg-slate-900 rounded border border-slate-600"
+                  >
                     <div
                       v-for="movie in tmdbResults.slice(0, 6)"
                       :key="movie.tmdb_id"
@@ -359,12 +526,19 @@
                         class="w-10 h-14 object-cover rounded"
                         :alt="movie.title"
                       />
-                      <div v-else class="w-10 h-14 bg-slate-700 rounded flex items-center justify-center text-xs text-slate-500">
+                      <div
+                        v-else
+                        class="w-10 h-14 bg-slate-700 rounded flex items-center justify-center text-xs text-slate-500"
+                      >
                         🎬
                       </div>
                       <div class="flex-1 min-w-0">
-                        <p class="text-white text-sm font-medium truncate">{{ movie.title }}</p>
-                        <p class="text-slate-400 text-xs">{{ movie.year || 'N/A' }}</p>
+                        <p class="text-white text-sm font-medium truncate">
+                          {{ movie.title }}
+                        </p>
+                        <p class="text-slate-400 text-xs">
+                          {{ movie.year || 'N/A' }}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -435,7 +609,6 @@
             </div>
           </div>
         </div>
-      </div>
 
         <!-- Movie Details Modal -->
         <div
@@ -443,79 +616,120 @@
           class="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
           @click.self="closeDetailsModal"
         >
-          <div class="bg-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-600 overflow-hidden">
+          <div
+            class="bg-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-600 overflow-hidden"
+          >
             <!-- Loading -->
             <div v-if="detailsLoading" class="p-12 text-center">
               <div class="text-4xl mb-4">🎬</div>
               <p class="text-slate-400">Завантаження...</p>
             </div>
-            
+
             <!-- Content -->
             <div v-else-if="movieDetails" class="flex flex-col md:flex-row">
               <!-- Poster -->
               <div class="md:w-1/3 shrink-0">
-                <img 
+                <img
                   v-if="movieDetails.poster_url"
                   :src="movieDetails.poster_url"
                   :alt="movieDetails.title"
                   class="w-full h-64 md:h-full object-cover"
                 />
-                <div v-else class="w-full h-64 md:h-full bg-slate-700 flex items-center justify-center text-6xl">
+                <div
+                  v-else
+                  class="w-full h-64 md:h-full bg-slate-700 flex items-center justify-center text-6xl"
+                >
                   🎬
                 </div>
               </div>
-              
+
               <!-- Info -->
-              <div class="p-6 flex-1">
-                <button 
-                  @click="closeDetailsModal" 
+              <div class="p-6 flex-1 relative">
+                <button
+                  @click="closeDetailsModal"
                   class="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl"
-                >✕</button>
-                
-                <h2 class="text-2xl font-bold text-white mb-1">{{ movieDetails.title }}</h2>
-                <p v-if="movieDetails.original_title && movieDetails.original_title !== movieDetails.title" class="text-slate-400 text-sm mb-2">
+                >
+                  ✕
+                </button>
+
+                <h2 class="text-2xl font-bold text-white mb-1">
+                  {{ movieDetails.title }}
+                </h2>
+                <p
+                  v-if="movieDetails.original_title && movieDetails.original_title !== movieDetails.title"
+                  class="text-slate-400 text-sm mb-2"
+                >
                   {{ movieDetails.original_title }}
                 </p>
-                <p v-if="movieDetails.tagline" class="text-purple-400 italic mb-4">
+                <p
+                  v-if="movieDetails.tagline"
+                  class="text-purple-400 italic mb-4"
+                >
                   "{{ movieDetails.tagline }}"
                 </p>
-                
+
                 <!-- Meta Info -->
                 <div class="flex flex-wrap gap-2 mb-4 text-sm">
-                  <span class="bg-purple-900/50 text-purple-300 px-2 py-1 rounded">
+                  <span
+                    class="bg-purple-900/50 text-purple-300 px-2 py-1 rounded"
+                  >
                     {{ movieDetails.year }}
                   </span>
-                  <span v-if="movieDetails.runtime" class="bg-slate-700 text-slate-300 px-2 py-1 rounded">
+                  <span
+                    v-if="movieDetails.runtime"
+                    class="bg-slate-700 text-slate-300 px-2 py-1 rounded"
+                  >
                     {{ movieDetails.runtime }} хв
                   </span>
-                  <span v-if="movieDetails.vote_average" class="bg-yellow-900/50 text-yellow-300 px-2 py-1 rounded">
+                  <span
+                    v-if="movieDetails.vote_average"
+                    class="bg-yellow-900/50 text-yellow-300 px-2 py-1 rounded"
+                  >
                     ⭐ {{ movieDetails.vote_average.toFixed(1) }}
                   </span>
                 </div>
-                
+
                 <!-- Genres -->
                 <div v-if="movieDetails.genre" class="mb-4">
                   <span class="text-sm text-slate-500">Жанри:</span>
-                  <span class="text-slate-300 ml-2">{{ movieDetails.genre }}</span>
+                  <span class="text-slate-300 ml-2"
+                    >{{ movieDetails.genre }}</span
+                  >
                 </div>
-                
+
                 <!-- Directors -->
-                <div v-if="movieDetails.directors && movieDetails.directors.length" class="mb-4">
+                <div
+                  v-if="movieDetails.directors && movieDetails.directors.length"
+                  class="mb-4"
+                >
                   <span class="text-sm text-slate-500">Режисер:</span>
-                  <span class="text-slate-300 ml-2">{{ movieDetails.directors.join(', ') }}</span>
+                  <span class="text-slate-300 ml-2"
+                    >{{ movieDetails.directors.join(', ') }}</span
+                  >
                 </div>
-                
+
                 <!-- Cast -->
-                <div v-if="movieDetails.cast && movieDetails.cast.length" class="mb-4">
+                <div
+                  v-if="movieDetails.cast && movieDetails.cast.length"
+                  class="mb-4"
+                >
                   <span class="text-sm text-slate-500">Актори:</span>
-                  <span class="text-slate-300 ml-2">{{ movieDetails.cast.join(', ') }}</span>
+                  <span class="text-slate-300 ml-2"
+                    >{{ movieDetails.cast.join(', ') }}</span
+                  >
                 </div>
-                
-                <!-- Overview -->
+
                 <!-- Overview -->
                 <div class="mt-4">
-                  <p v-if="movieDetails.overview" class="text-slate-400 text-sm leading-relaxed">{{ movieDetails.overview }}</p>
-                  <p v-else class="text-slate-600 text-sm italic">Опис відсутній.</p>
+                  <p
+                    v-if="movieDetails.overview"
+                    class="text-slate-400 text-sm leading-relaxed"
+                  >
+                    {{ movieDetails.overview }}
+                  </p>
+                  <p v-else class="text-slate-600 text-sm italic">
+                    Опис відсутній.
+                  </p>
                 </div>
               </div>
             </div>
@@ -528,12 +742,27 @@
       const { createApp } = Vue;
       const API_URL = "http://127.0.0.1:8000";
 
+      const MONTH_NAMES = [
+        "Січень",
+        "Лютий",
+        "Березень",
+        "Квітень",
+        "Травень",
+        "Червень",
+        "Липень",
+        "Серпень",
+        "Вересень",
+        "Жовтень",
+        "Листопад",
+        "Грудень",
+      ];
+
       createApp({
         data() {
           return {
             // Auth state
             isAuthenticated: false,
-            authMode: "login", // 'login' or 'register'
+            authMode: "login",
             authForm: {
               email: "",
               username: "",
@@ -544,6 +773,9 @@
             authLoading: false,
             token: null,
             userEmail: "",
+
+            // Tab state
+            activeTab: "movies", // 'movies' | 'stats'
 
             // Movies state
             movies: [],
@@ -567,20 +799,33 @@
               original_title: "",
             },
             debounceTimer: null,
+
             // TMDB Search
             tmdbQuery: "",
             tmdbResults: [],
             tmdbLoading: false,
             tmdbSearchTimer: null,
-            
+
             // Movie Details Modal
             showDetailsModal: false,
             movieDetails: null,
             detailsLoading: false,
+
+            // Stats
+            stats: null,
+            statsLoading: false,
           };
         },
+        computed: {
+          totalMovies() {
+            if (!this.stats) return 0;
+            return Object.values(this.stats.by_status).reduce(
+              (a, b) => a + b,
+              0,
+            );
+          },
+        },
         mounted() {
-          // Check for existing token
           const savedToken = localStorage.getItem("token");
           const savedEmail = localStorage.getItem("userEmail");
           if (savedToken) {
@@ -633,9 +878,8 @@
           },
 
           async login() {
-            // OAuth2 requires form data, not JSON
             const formData = new URLSearchParams();
-            formData.append("username", this.authForm.email); // OAuth2 uses "username" field
+            formData.append("username", this.authForm.email);
             formData.append("password", this.authForm.password);
 
             const res = await fetch(`${API_URL}/auth/login`, {
@@ -650,7 +894,6 @@
               throw new Error(data.detail || "Невірний email або пароль");
             }
 
-            // Save token
             this.token = data.access_token;
             this.userEmail = this.authForm.email;
             localStorage.setItem("token", this.token);
@@ -665,21 +908,59 @@
             this.userEmail = "";
             this.isAuthenticated = false;
             this.movies = [];
+            this.stats = null;
+            this.activeTab = "movies";
             localStorage.removeItem("token");
             localStorage.removeItem("userEmail");
-
-            // Reset auth form
             this.authForm = { email: "", username: "", password: "" };
             this.authError = "";
             this.authSuccess = "";
           },
 
-          // Helper for authorized requests
           getAuthHeaders() {
             return {
               "Content-Type": "application/json",
               Authorization: `Bearer ${this.token}`,
             };
+          },
+
+          // ========== TAB METHODS ==========
+          async switchTab(tab) {
+            this.activeTab = tab;
+            if (tab === "stats" && !this.stats) {
+              await this.fetchStats();
+            }
+          },
+
+          // ========== STATS METHODS ==========
+          async fetchStats() {
+            this.statsLoading = true;
+            try {
+              const res = await fetch(`${API_URL}/movies/stats/`, {
+                headers: this.getAuthHeaders(),
+              });
+              if (res.status === 401) {
+                this.logout();
+                return;
+              }
+              if (res.ok) {
+                this.stats = await res.json();
+              }
+            } catch (e) {
+              console.error("Error fetching stats:", e);
+            } finally {
+              this.statsLoading = false;
+            }
+          },
+
+          genreBarWidth(count) {
+            if (!this.stats || this.stats.top_genres.length === 0) return 0;
+            const max = this.stats.top_genres[0].count;
+            return max > 0 ? Math.round((count / max) * 100) : 0;
+          },
+
+          monthName(n) {
+            return MONTH_NAMES[n - 1] || n;
           },
 
           // ========== MOVIE METHODS ==========
@@ -771,6 +1052,8 @@
               if (res.ok) {
                 this.closeModal();
                 this.fetchMovies();
+                // Invalidate stats cache so next visit reloads fresh data
+                this.stats = null;
               } else {
                 const data = await res.json();
                 alert(data.detail || "Помилка збереження");
@@ -782,8 +1065,8 @@
           },
 
           async deleteMovie(id) {
-            if (!confirm('Ви впевнені, що хочете видалити цей фільм?')) return;
-            
+            if (!confirm("Ви впевнені, що хочете видалити цей фільм?")) return;
+
             try {
               const res = await fetch(`${API_URL}/movies/${id}`, {
                 method: "DELETE",
@@ -796,6 +1079,7 @@
               }
 
               this.fetchMovies();
+              this.stats = null; // Invalidate stats cache
             } catch (e) {
               console.error(e);
             }
@@ -809,6 +1093,7 @@
             };
             return colors[status] || "bg-gray-500/20";
           },
+
           formatStatus(status) {
             const map = {
               want_to_watch: "У планах",
@@ -830,7 +1115,7 @@
               try {
                 const res = await fetch(
                   `${API_URL}/movies/search?query=${encodeURIComponent(this.tmdbQuery)}`,
-                  { headers: this.getAuthHeaders() }
+                  { headers: this.getAuthHeaders() },
                 );
                 if (res.ok) {
                   this.tmdbResults = await res.json();
@@ -851,21 +1136,25 @@
             this.form.poster_url = movie.poster_url || "";
             this.form.overview = movie.overview || "";
             this.form.genre = movie.genre || "";
-            
+
             this.tmdbQuery = "";
             this.tmdbResults = [];
 
-            // Fetch full details to ensure genre and other fields are populated correctly
             if (movie.tmdb_id) {
               try {
-                const res = await fetch(`${API_URL}/movies/tmdb/${movie.tmdb_id}`, {
-                  headers: this.getAuthHeaders()
-                });
+                const res = await fetch(
+                  `${API_URL}/movies/tmdb/${movie.tmdb_id}`,
+                  {
+                    headers: this.getAuthHeaders(),
+                  },
+                );
                 if (res.ok) {
                   const details = await res.json();
                   if (details.genre) this.form.genre = details.genre;
-                  if (details.overview && !this.form.overview) this.form.overview = details.overview;
-                  if (details.original_title) this.form.original_title = details.original_title;
+                  if (details.overview && !this.form.overview)
+                    this.form.overview = details.overview;
+                  if (details.original_title)
+                    this.form.original_title = details.original_title;
                 }
               } catch (e) {
                 console.warn("Failed to fetch full details for autofill", e);
@@ -876,15 +1165,15 @@
           // ========== MOVIE DETAILS MODAL ==========
           async showMovieDetails(movie) {
             if (!movie.tmdb_id) return;
-            
+
             this.showDetailsModal = true;
             this.detailsLoading = true;
             this.movieDetails = null;
-            
+
             try {
               const res = await fetch(
                 `${API_URL}/movies/tmdb/${movie.tmdb_id}`,
-                { headers: this.getAuthHeaders() }
+                { headers: this.getAuthHeaders() },
               );
               if (res.ok) {
                 this.movieDetails = await res.json();

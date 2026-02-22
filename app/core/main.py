@@ -1,7 +1,8 @@
 # region Модулі для БД / Веба
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete, update, func, extract
 from app.auth.registration import router as auth_router
@@ -10,17 +11,20 @@ from app.auth.security import get_current_user
 from app.database.models import User
 from app.core.redis_client import get_redis, close_redis
 from app.services.tmdb import TMDBService
+from app.core.ws_manager import ConnectionManager
 # endregion
 
 # region Python / Mine модулі
 import asyncio
 from collections import Counter
+from jose import JWTError, jwt
 from app.core.mytools import is_none_filter
 from app.database.database import init_db, get_db
 from app.core.logger import setup_logger
 from app.database.schemas import MovieResponse, MovieCreate, MovieUpdate, StatsResponse, MonthlyHistory, GenreCount
 from app.database.models import Movie, MovieStatus
 from datetime import datetime
+import os
 # endregion
 
 """
@@ -30,6 +34,9 @@ from datetime import datetime
 
 # Глобальна змінна для TMDB сервісу (ініціалізується в lifespan)
 tmdb_service = None
+
+# Глобальний менеджер WebSocket з'єднань
+manager = ConnectionManager()
 
 # Життєвий цикл для керування ресурсами (Асинхронність)
 @asynccontextmanager
@@ -73,10 +80,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(login_router) # login
-app.include_router(auth_router) # Підключаємо роутер registration
+app.include_router(login_router)
+app.include_router(auth_router)
 app_logger = setup_logger()
-section = "APP" # Для зрозумілості звідки логи
+section = "APP"
+
+# Роздаємо фронтенд через HTTP (вирішує проблему null origin для WebSocket)
+_frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend")
+app.mount("/app", StaticFiles(directory=_frontend_path, html=True), name="frontend")
 
 
 # ========== TMDB API ==========
@@ -231,6 +242,11 @@ async def add_movie(append_movie: MovieCreate,
     new_movie = result.scalar_one()
     app_logger.info(f"{section} | {new_movie.title} has appended to database")
 
+    await manager.broadcast_to_user(current_user.id, {
+        "event": "added",
+        "movie": {"id": new_movie.id, "title": new_movie.title, "status": new_movie.status.value} # type: ignore
+    })
+
     return new_movie
 
 # Точка PATCH для ОНОВЛЕННЯ фільму через АЙДІ
@@ -260,7 +276,12 @@ async def update_movie(movie_id: int,
     if not updated_movie:
         raise HTTPException(status_code=404,
         detail="Movie not found")
-    
+
+    await manager.broadcast_to_user(current_user.id, {
+        "event": "updated",
+        "movie": {"id": updated_movie.id, "title": updated_movie.title, "status": updated_movie.status.value} # type: ignore
+    })
+
     return updated_movie
 
 # Точка DELETE для ВИДАЛЕННЯ фільму по АЙДІ
@@ -277,5 +298,58 @@ async def delete_movie(movie_id: int,
     if not deleted_movie:
         raise HTTPException(status_code=404,
         detail="Movie not found")
-    
+
+    await manager.broadcast_to_user(current_user.id, {
+        "event": "deleted",
+        "movie_id": movie_id
+    })
+
     return deleted_movie
+
+
+# ========== WEBSOCKET ==========
+
+@app.websocket("/ws")
+async def websocket_endpoint(
+        websocket: WebSocket,
+        token: str = Query(...),
+        db: AsyncSession = Depends(get_db)
+    ):
+    """
+    WebSocket ендпоїнт з JWT автентифікацією через query param ?token=<jwt>
+    Кожна вкладка браузера відкриває окреме з'єднання.
+
+    ВАЖЛИВО: спочатку accept(), потім перевірка — бо close() без accept() 
+    призводить до network error (code 1006) у браузері.
+    """
+    from app.auth.security import verify_token
+    from sqlalchemy import select as sa_select
+
+    # Спочатку приймаємо WS handshake
+    await websocket.accept()
+
+    payload = verify_token(token)
+    if payload is None:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    email = payload.get("sub")
+    stmt = sa_select(User).where(User.email == email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        await websocket.close(code=4001, reason="User not found")
+        return
+
+    await manager.connect(user.id, websocket)
+    app_logger.info(f"WS | User {user.email} connected")
+
+    try:
+        while True:
+            # Чекаємо ping або повідомлення від клієнта (підтримуємо з'єднання живим)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(user.id, websocket)
+        app_logger.info(f"WS | User {user.email} disconnected")
+

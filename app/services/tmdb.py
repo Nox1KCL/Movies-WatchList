@@ -7,7 +7,6 @@ import redis.asyncio as redis
 import os
 import httpx
 import json
-from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv("app/.env")
@@ -50,8 +49,6 @@ class TMDBService:
                 self.genres_loaded = True
     
 
-
-    
     async def get_genres_text(self, genre_ids: list[int]) -> str:
         """Перетворити список ID жанрів у текст."""
         if not self.redis_client or not genre_ids:

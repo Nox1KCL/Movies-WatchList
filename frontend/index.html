@@ -40,6 +40,15 @@
       .genre-bar {
         transition: width 0.6s ease;
       }
+
+      /* Toast нотифікації */
+      .toast-enter-active, .toast-leave-active {
+        transition: all 0.35s ease;
+      }
+      .toast-enter-from, .toast-leave-to {
+        opacity: 0;
+        transform: translateY(16px);
+      }
     </style>
   </head>
 
@@ -59,7 +68,7 @@
             >
               Movie Watchlist 🍿
             </h1>
-            <p class="text-slate-400 text-sm">{{ authMode === "login" ? "Увійди в свій акаунт" : "Створи новий акаунт" }}</p>
+            <p class="text-slate-400 text-sm">{{ authMode === 'login' ? 'Увійди в свій акаунт' : 'Створи новий акаунт' }}</p>
           </div>
 
           <!-- Auth Tabs -->
@@ -736,6 +745,21 @@
           </div>
         </div>
       </div>
+
+      <!-- TOAST НОТИФІКАЦІЯ -->
+      <teleport to="body">
+        <transition name="toast">
+          <div
+            v-if="toast"
+            :class="[
+              'fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl font-semibold text-white text-sm',
+              toast.type === 'red' ? 'bg-red-600' : 'bg-emerald-600'
+            ]"
+          >
+            <span>{{ toast.text }}</span>
+          </div>
+        </transition>
+      </teleport>
     </div>
 
     <script>
@@ -814,6 +838,14 @@
             // Stats
             stats: null,
             statsLoading: false,
+
+            // WebSocket
+            ws: null,
+            wsReconnectTimer: null,
+
+            // Toast нотифікації
+            toast: null,
+            toastTimer: null,
           };
         },
         computed: {
@@ -833,9 +865,62 @@
             this.userEmail = savedEmail || "";
             this.isAuthenticated = true;
             this.fetchMovies();
+            this.connectWebSocket();
           }
         },
+        beforeUnmount() {
+          if (this.ws) this.ws.close();
+          clearTimeout(this.wsReconnectTimer);
+        },
         methods: {
+          // ========== WEBSOCKET ==========
+          connectWebSocket() {
+            if (!this.token) return;
+            const wsUrl = `ws://127.0.0.1:8000/ws?token=${this.token}`;
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onmessage = (event) => {
+              this.handleWsMessage(JSON.parse(event.data));
+            };
+
+            this.ws.onclose = (event) => {
+              // 4001 = invalid token, не перепідключатись
+              if (event.code === 4001) return;
+              // Auto-reconnect через 3 сек
+              this.wsReconnectTimer = setTimeout(
+                () => this.connectWebSocket(),
+                3000,
+              );
+            };
+
+            this.ws.onerror = () => {
+              this.ws.close();
+            };
+          },
+
+          handleWsMessage(data) {
+            const labels = {
+              added: `➕ Додано: ${data.movie?.title ?? ""}`,
+              updated: `✏️ Оновлено: ${data.movie?.title ?? ""}`,
+              deleted: "🗑️ Фільм видалено",
+            };
+            this.showToast(
+              labels[data.event] ?? "🔄 Список оновлено",
+              data.event === "deleted" ? "red" : "green",
+            );
+            this.fetchMovies();
+            this.stats = null; // інвалідація кешу статистики
+            if (this.activeTab === "stats") this.fetchStats();
+          },
+
+          showToast(text, type = "green") {
+            clearTimeout(this.toastTimer);
+            this.toast = { text, type };
+            this.toastTimer = setTimeout(() => {
+              this.toast = null;
+            }, 3500);
+          },
+
           // ========== AUTH METHODS ==========
           async handleAuth() {
             this.authError = "";
@@ -901,9 +986,13 @@
 
             this.isAuthenticated = true;
             this.fetchMovies();
+            this.connectWebSocket();
           },
 
           logout() {
+            // Закриваємо WS при виході
+            if (this.ws) { this.ws.onclose = null; this.ws.close(); this.ws = null; }
+            clearTimeout(this.wsReconnectTimer);
             this.token = null;
             this.userEmail = "";
             this.isAuthenticated = false;
